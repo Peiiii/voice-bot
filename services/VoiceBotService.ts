@@ -34,36 +34,12 @@ export class VoiceBotService {
   public async start(): Promise<void> {
     this.error$.next(null);
     this.transcript$.next([]);
+    this.state$.next(ConversationState.LISTENING); // Early optimistic state update
     
     try {
-      this.inputAudioContext = new AudioContext({ sampleRate: 16000 });
-      this.outputAudioContext = new AudioContext({ sampleRate: 24000 });
-      
-      this.playbackQueue = new AudioPlaybackQueue(this.outputAudioContext);
-      this.playbackQueue.setOnPlaybackEnd(() => {
-        // When the bot finishes speaking, it goes back to listening.
-        this.state$.next(ConversationState.LISTENING);
-      });
-
-      this.sessionPromise = this.ai.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-        config: {
-          responseModalities: [Modality.AUDIO],
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
-          },
-          systemInstruction: 'You are a friendly and expressive robot. Keep your responses concise and conversational.',
-        },
-        callbacks: {
-          onopen: this._onSessionOpen.bind(this),
-          onmessage: this._onSessionMessage.bind(this),
-          onerror: this._onSessionError.bind(this),
-          onclose: this._onSessionClose.bind(this),
-        },
-      });
-
+      this._initializeAudioResources();
+      this.sessionPromise = this._connectToLiveSession();
+      await this.sessionPromise; // Wait for the session to be established before returning
     } catch (err: any) {
       this.error$.next(`Failed to start conversation: ${err.message}`);
       await this.stop();
@@ -89,6 +65,26 @@ export class VoiceBotService {
       this.microphoneProcessor = null;
     }
 
+    await this._cleanupAudioResources();
+    
+    this.currentInputTranscription$.next('');
+    this.currentOutputTranscription$.next('');
+  }
+
+  private _initializeAudioResources(): void {
+    this.inputAudioContext = new AudioContext({ sampleRate: 16000 });
+    this.outputAudioContext = new AudioContext({ sampleRate: 24000 });
+    
+    this.playbackQueue = new AudioPlaybackQueue(this.outputAudioContext);
+    this.playbackQueue.setOnPlaybackEnd(() => {
+      // When the bot finishes speaking, it goes back to listening.
+      if (this.state$.getValue() === ConversationState.SPEAKING) {
+        this.state$.next(ConversationState.LISTENING);
+      }
+    });
+  }
+
+  private async _cleanupAudioResources(): Promise<void> {
     if (this.inputAudioContext && this.inputAudioContext.state !== 'closed') {
       await this.inputAudioContext.close();
       this.inputAudioContext = null;
@@ -99,14 +95,31 @@ export class VoiceBotService {
         await this.outputAudioContext.close();
         this.outputAudioContext = null;
     }
-    
-    this.currentInputTranscription$.next('');
-    this.currentOutputTranscription$.next('');
+  }
+
+  private _connectToLiveSession(): Promise<any> {
+    return this.ai.live.connect({
+      model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+      config: {
+        responseModalities: [Modality.AUDIO],
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
+        },
+        systemInstruction: 'You are a friendly and expressive robot. Keep your responses concise and conversational.',
+      },
+      callbacks: {
+        onopen: this._onSessionOpen,
+        onmessage: this._onSessionMessage,
+        onerror: this._onSessionError,
+        onclose: this._onSessionClose,
+      },
+    });
   }
   
-  private async _onSessionOpen(): Promise<void> {
+  private _onSessionOpen = async (): Promise<void> => {
     this.state$.next(ConversationState.LISTENING);
-    
     try {
         this.microphoneProcessor = await setupMicrophone(
           this.inputAudioContext!,
@@ -124,7 +137,7 @@ export class VoiceBotService {
     }
   }
 
-  private _updateTranscript(speaker: 'user' | 'bot', text: string): void {
+  private _updateTranscript = (speaker: 'user' | 'bot', text: string): void => {
     const currentTranscript = this.transcript$.getValue();
     const last = currentTranscript[currentTranscript.length - 1];
 
@@ -139,21 +152,21 @@ export class VoiceBotService {
     }
   }
 
-  private _handleInputTranscription(text: string): void {
+  private _handleInputTranscription = (text: string): void => {
     this.state$.next(ConversationState.LISTENING);
     const newText = this.currentInputTranscription$.getValue() + text;
     this.currentInputTranscription$.next(newText);
     this._updateTranscript('user', newText);
   }
 
-  private _handleOutputTranscription(text: string): void {
+  private _handleOutputTranscription = (text: string): void => {
     this.state$.next(ConversationState.SPEAKING);
     const newText = this.currentOutputTranscription$.getValue() + text;
     this.currentOutputTranscription$.next(newText);
     this._updateTranscript('bot', newText);
   }
 
-  private async _onSessionMessage(message: LiveServerMessage): Promise<void> {
+  private _onSessionMessage = async (message: LiveServerMessage): Promise<void> => {
     const outputText = message.serverContent?.outputTranscription?.text;
     const inputText = message.serverContent?.inputTranscription?.text;
 
@@ -175,14 +188,13 @@ export class VoiceBotService {
     }
   }
   
-  // FIX: Changed parameter type from 'Error' to 'ErrorEvent' to match the expected callback signature.
-  private _onSessionError(e: ErrorEvent): void {
+  private _onSessionError = (e: ErrorEvent): void => {
     console.error(e);
     this.error$.next(`An error occurred: ${e.message}`);
     this.stop();
   }
 
-  private _onSessionClose(): void {
+  private _onSessionClose = (): void => {
      console.log('Session closed');
      this.stop();
   }
