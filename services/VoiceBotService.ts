@@ -1,6 +1,7 @@
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { ConversationState } from '../types';
-import { decode, decodeAudioData, createPcmBlob } from '../utils/audioUtils';
+import { AudioPlaybackQueue } from '../utils/audioPlayback';
+import { setupMicrophone, cleanupMicrophone, MicrophoneProcessor } from '../utils/microphone';
 
 // Polyfill for webkit browsers
 // FIX: Cast window to `any` to support `webkitAudioContext` for older browsers.
@@ -20,11 +21,9 @@ export class VoiceBotService {
   private sessionPromise: Promise<any> | null = null;
   private inputAudioContext: AudioContext | null = null;
   private outputAudioContext: AudioContext | null = null;
-  private microphoneStream: MediaStream | null = null;
-  private scriptProcessor: ScriptProcessorNode | null = null;
-  
-  private sources = new Set<AudioBufferSourceNode>();
-  private nextStartTime = 0;
+
+  private microphoneProcessor: MicrophoneProcessor | null = null;
+  private playbackQueue: AudioPlaybackQueue | null = null;
   
   private currentInputTranscription = '';
   private currentOutputTranscription = '';
@@ -40,7 +39,12 @@ export class VoiceBotService {
     try {
       this.inputAudioContext = new AudioContext({ sampleRate: 16000 });
       this.outputAudioContext = new AudioContext({ sampleRate: 24000 });
-      this.nextStartTime = 0;
+      
+      this.playbackQueue = new AudioPlaybackQueue(this.outputAudioContext);
+      this.playbackQueue.setOnPlaybackEnd(() => {
+        // When the bot finishes speaking, it goes back to listening.
+        this._setState(ConversationState.LISTENING);
+      });
 
       this.sessionPromise = this.ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -81,14 +85,9 @@ export class VoiceBotService {
         }
     }
     
-    if (this.microphoneStream) {
-      this.microphoneStream.getTracks().forEach((track) => track.stop());
-      this.microphoneStream = null;
-    }
-
-    if (this.scriptProcessor) {
-        this.scriptProcessor.disconnect(); 
-        this.scriptProcessor = null;
+    if (this.microphoneProcessor) {
+      cleanupMicrophone(this.microphoneProcessor);
+      this.microphoneProcessor = null;
     }
 
     if (this.inputAudioContext && this.inputAudioContext.state !== 'closed') {
@@ -97,15 +96,13 @@ export class VoiceBotService {
     }
 
     if (this.outputAudioContext && this.outputAudioContext.state !== 'closed') {
-        this.sources.forEach(source => source.stop());
-        this.sources.clear();
+        this.playbackQueue?.stop();
         await this.outputAudioContext.close();
         this.outputAudioContext = null;
     }
     
     this.currentInputTranscription = '';
     this.currentOutputTranscription = '';
-    this.nextStartTime = 0;
   }
   
   private _setState(state: ConversationState): void {
@@ -116,21 +113,16 @@ export class VoiceBotService {
     this._setState(ConversationState.LISTENING);
     
     try {
-        this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const source = this.inputAudioContext!.createMediaStreamSource(this.microphoneStream);
-        this.scriptProcessor = this.inputAudioContext!.createScriptProcessor(4096, 1, 1);
-
-        this.scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
-            const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
-            const pcmBlob = createPcmBlob(inputData);
-            if (this.sessionPromise) {
-                this.sessionPromise.then((session) => {
-                    session.sendRealtimeInput({ media: pcmBlob });
-                });
-            }
-        };
-        source.connect(this.scriptProcessor);
-        this.scriptProcessor.connect(this.inputAudioContext!.destination);
+        this.microphoneProcessor = await setupMicrophone(
+          this.inputAudioContext!,
+          (pcmBlob) => {
+              if (this.sessionPromise) {
+                  this.sessionPromise.then((session) => {
+                      session.sendRealtimeInput({ media: pcmBlob });
+                  });
+              }
+          }
+        );
     } catch (err: any) {
         this.callbacks.onError(`Microphone access denied: ${err.message}`);
         await this.stop();
@@ -164,23 +156,8 @@ export class VoiceBotService {
     }
 
     const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
-    if (base64Audio && this.outputAudioContext) {
-      const audioBuffer = await decodeAudioData(decode(base64Audio), this.outputAudioContext, 24000, 1);
-      const source = this.outputAudioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(this.outputAudioContext.destination);
-      
-      source.addEventListener('ended', () => {
-        this.sources.delete(source);
-        if (this.sources.size === 0) {
-            this._setState(ConversationState.LISTENING);
-        }
-      });
-      
-      this.nextStartTime = Math.max(this.nextStartTime, this.outputAudioContext.currentTime);
-      source.start(this.nextStartTime);
-      this.nextStartTime += audioBuffer.duration;
-      this.sources.add(source);
+    if (base64Audio && this.playbackQueue) {
+      await this.playbackQueue.add(base64Audio);
     }
   }
   
