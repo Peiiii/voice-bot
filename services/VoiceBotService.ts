@@ -1,5 +1,6 @@
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { ConversationState } from '../types';
+import { BehaviorSubject } from 'rxjs';
+import { ConversationState, TranscriptEntry } from '../types';
 import { AudioPlaybackQueue } from '../utils/audioPlayback';
 import { setupMicrophone, cleanupMicrophone, MicrophoneProcessor } from '../utils/microphone';
 
@@ -7,15 +8,8 @@ import { setupMicrophone, cleanupMicrophone, MicrophoneProcessor } from '../util
 // FIX: Cast window to `any` to support `webkitAudioContext` for older browsers.
 const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
 
-interface VoiceBotServiceCallbacks {
-  onStateChange: (state: ConversationState) => void;
-  onTranscriptUpdate: (speaker: 'user' | 'bot', text: string) => void;
-  onError: (error: string | null) => void;
-}
-
 export class VoiceBotService {
   private ai: GoogleGenAI;
-  private callbacks: VoiceBotServiceCallbacks;
   
   // FIX: Replaced 'LiveSession' with 'any' as it is not an exported type from @google/genai.
   private sessionPromise: Promise<any> | null = null;
@@ -25,16 +19,21 @@ export class VoiceBotService {
   private microphoneProcessor: MicrophoneProcessor | null = null;
   private playbackQueue: AudioPlaybackQueue | null = null;
   
-  private currentInputTranscription = '';
-  private currentOutputTranscription = '';
+  private currentInputTranscription$ = new BehaviorSubject<string>('');
+  private currentOutputTranscription$ = new BehaviorSubject<string>('');
 
-  constructor(apiKey: string, callbacks: VoiceBotServiceCallbacks) {
+  // Public observables for state management
+  public state$ = new BehaviorSubject<ConversationState>(ConversationState.IDLE);
+  public transcript$ = new BehaviorSubject<TranscriptEntry[]>([]);
+  public error$ = new BehaviorSubject<string | null>(null);
+
+  constructor(apiKey: string) {
     this.ai = new GoogleGenAI({ apiKey });
-    this.callbacks = callbacks;
   }
 
   public async start(): Promise<void> {
-    this.callbacks.onError(null);
+    this.error$.next(null);
+    this.transcript$.next([]);
     
     try {
       this.inputAudioContext = new AudioContext({ sampleRate: 16000 });
@@ -43,7 +42,7 @@ export class VoiceBotService {
       this.playbackQueue = new AudioPlaybackQueue(this.outputAudioContext);
       this.playbackQueue.setOnPlaybackEnd(() => {
         // When the bot finishes speaking, it goes back to listening.
-        this._setState(ConversationState.LISTENING);
+        this.state$.next(ConversationState.LISTENING);
       });
 
       this.sessionPromise = this.ai.live.connect({
@@ -66,13 +65,13 @@ export class VoiceBotService {
       });
 
     } catch (err: any) {
-      this.callbacks.onError(`Failed to start conversation: ${err.message}`);
+      this.error$.next(`Failed to start conversation: ${err.message}`);
       await this.stop();
     }
   }
 
   public async stop(): Promise<void> {
-    this._setState(ConversationState.IDLE);
+    this.state$.next(ConversationState.IDLE);
     
     if (this.sessionPromise) {
         try {
@@ -101,16 +100,12 @@ export class VoiceBotService {
         this.outputAudioContext = null;
     }
     
-    this.currentInputTranscription = '';
-    this.currentOutputTranscription = '';
+    this.currentInputTranscription$.next('');
+    this.currentOutputTranscription$.next('');
   }
   
-  private _setState(state: ConversationState): void {
-    this.callbacks.onStateChange(state);
-  }
-
   private async _onSessionOpen(): Promise<void> {
-    this._setState(ConversationState.LISTENING);
+    this.state$.next(ConversationState.LISTENING);
     
     try {
         this.microphoneProcessor = await setupMicrophone(
@@ -124,35 +119,54 @@ export class VoiceBotService {
           }
         );
     } catch (err: any) {
-        this.callbacks.onError(`Microphone access denied: ${err.message}`);
+        this.error$.next(`Microphone access denied: ${err.message}`);
         await this.stop();
     }
   }
 
+  private _updateTranscript(speaker: 'user' | 'bot', text: string): void {
+    const currentTranscript = this.transcript$.getValue();
+    const last = currentTranscript[currentTranscript.length - 1];
+
+    if (last?.speaker === speaker) {
+      // Update the last entry for streaming transcript
+      const updatedTranscript = [...currentTranscript.slice(0, -1), { speaker, text }];
+      this.transcript$.next(updatedTranscript);
+    } else {
+      // Add a new entry for a new speaker
+      const updatedTranscript = [...currentTranscript, { speaker, text }];
+      this.transcript$.next(updatedTranscript);
+    }
+  }
+
+  private _handleInputTranscription(text: string): void {
+    this.state$.next(ConversationState.LISTENING);
+    const newText = this.currentInputTranscription$.getValue() + text;
+    this.currentInputTranscription$.next(newText);
+    this._updateTranscript('user', newText);
+  }
+
+  private _handleOutputTranscription(text: string): void {
+    this.state$.next(ConversationState.SPEAKING);
+    const newText = this.currentOutputTranscription$.getValue() + text;
+    this.currentOutputTranscription$.next(newText);
+    this._updateTranscript('bot', newText);
+  }
+
   private async _onSessionMessage(message: LiveServerMessage): Promise<void> {
-    let speaker: 'user' | 'bot' | undefined;
-    let text: string | undefined;
+    const outputText = message.serverContent?.outputTranscription?.text;
+    const inputText = message.serverContent?.inputTranscription?.text;
 
-    if (message.serverContent?.outputTranscription) {
-      this._setState(ConversationState.SPEAKING);
-      this.currentOutputTranscription += message.serverContent.outputTranscription.text;
-      speaker = 'bot';
-      text = this.currentOutputTranscription;
-    } else if (message.serverContent?.inputTranscription) {
-      this._setState(ConversationState.LISTENING);
-      this.currentInputTranscription += message.serverContent.inputTranscription.text;
-      speaker = 'user';
-      text = this.currentInputTranscription;
+    if (outputText) {
+      this._handleOutputTranscription(outputText);
+    } else if (inputText) {
+      this._handleInputTranscription(inputText);
     }
-
-    if (speaker && text) {
-        this.callbacks.onTranscriptUpdate(speaker, text);
-    }
-
+    
     if (message.serverContent?.turnComplete) {
-      this.currentInputTranscription = '';
-      this.currentOutputTranscription = '';
-      this._setState(ConversationState.LISTENING);
+      this.currentInputTranscription$.next('');
+      this.currentOutputTranscription$.next('');
+      this.state$.next(ConversationState.LISTENING);
     }
 
     const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
@@ -164,7 +178,7 @@ export class VoiceBotService {
   // FIX: Changed parameter type from 'Error' to 'ErrorEvent' to match the expected callback signature.
   private _onSessionError(e: ErrorEvent): void {
     console.error(e);
-    this.callbacks.onError(`An error occurred: ${e.message}`);
+    this.error$.next(`An error occurred: ${e.message}`);
     this.stop();
   }
 
