@@ -1,0 +1,7 @@
+{
+  "name": "Expressive Voice Bot",
+  "description": "An expressive voice-enabled conversational AI bot powered by the Gemini API. The bot displays facial expressions for idle, listening, and speaking states, and provides real-time transcription of the conversation.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
