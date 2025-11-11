@@ -6,7 +6,7 @@ import { ConversationState } from './types';
 import { useVoiceBot } from './hooks/useVoiceBot';
 
 const App: React.FC = () => {
-  const { conversationState, transcripts, error, toggleConversation } = useVoiceBot();
+  const { conversationState, transcripts, error, toggleConversation, robotColor } = useVoiceBot();
   
   const getButtonState = () => {
     switch (conversationState) {
@@ -29,7 +29,7 @@ const App: React.FC = () => {
         <h1 className="text-4xl font-bold text-gray-200 mb-2">Meet Sparky, Your AI Pal</h1>
         <p className="text-gray-400 mb-6">A curious bot from the future, powered by Gemini.</p>
         
-        <RobotFace state={conversationState} />
+        <RobotFace state={conversationState} color={robotColor} />
         
         <div className="w-full my-6">
           <Transcription transcripts={transcripts} />

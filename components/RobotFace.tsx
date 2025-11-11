@@ -4,6 +4,7 @@ import { ConversationState } from '../types';
 
 interface RobotFaceProps {
   state: ConversationState;
+  color: string;
 }
 
 const Eye: React.FC<{ cx: number; cy: number; state: ConversationState }> = ({ cx, cy, state }) => {
@@ -37,12 +38,17 @@ const Mouth: React.FC<{ state: ConversationState }> = ({ state }) => {
 };
 
 
-export const RobotFace: React.FC<RobotFaceProps> = ({ state }) => {
+export const RobotFace: React.FC<RobotFaceProps> = ({ state, color }) => {
   return (
     <div className="flex justify-center items-center p-4">
       <svg viewBox="0 0 240 200" className="w-64 h-auto md:w-80">
         {/* Head */}
-        <rect x="20" y="20" width="200" height="160" rx="30" ry="30" className="fill-gray-800 stroke-gray-700" strokeWidth="4" />
+        <rect 
+          x="20" y="20" width="200" height="160" rx="30" ry="30" 
+          className="stroke-gray-700 transition-colors duration-500" 
+          strokeWidth="4" 
+          style={{ fill: color }} 
+        />
         
         {/* Antenna */}
         <line x1="120" y1="20" x2="120" y2="0" strokeWidth="3" className="stroke-gray-600" />

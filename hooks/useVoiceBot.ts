@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Subscription } from 'rxjs';
 import { ConversationState, TranscriptEntry } from '../types';
@@ -7,6 +8,7 @@ export const useVoiceBot = () => {
   const [conversationState, setConversationState] = useState<ConversationState>(ConversationState.IDLE);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [robotColor, setRobotColor] = useState<string>('#1F2937'); // Default: gray-800
 
   const serviceRef = useRef<VoiceBotService | null>(null);
   const subscriptionsRef = useRef<Subscription | null>(null);
@@ -25,6 +27,7 @@ export const useVoiceBot = () => {
         subscriptions.add(service.state$.subscribe(setConversationState));
         subscriptions.add(service.transcript$.subscribe(setTranscripts));
         subscriptions.add(service.error$.subscribe(setError));
+        subscriptions.add(service.robotColor$.subscribe(setRobotColor));
         subscriptionsRef.current = subscriptions;
     }
     return serviceRef.current;
@@ -49,5 +52,5 @@ export const useVoiceBot = () => {
     };
   }, []);
 
-  return { conversationState, transcripts, error, toggleConversation };
+  return { conversationState, transcripts, error, toggleConversation, robotColor };
 };

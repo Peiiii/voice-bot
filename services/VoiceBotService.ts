@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality, FunctionDeclaration, Type } from '@google/genai';
 import { BehaviorSubject } from 'rxjs';
 import { ConversationState, TranscriptEntry } from '../types';
 import { AudioPlaybackQueue } from '../utils/audioPlayback';
@@ -8,6 +8,21 @@ import { setupMicrophone, cleanupMicrophone, MicrophoneProcessor } from '../util
 // Polyfill for webkit browsers
 // FIX: Cast window to `any` to support `webkitAudioContext` for older browsers.
 const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+
+const changeRobotColorFunctionDeclaration: FunctionDeclaration = {
+    name: 'changeRobotColor',
+    description: "Changes the robot's main head color.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        color: {
+          type: Type.STRING,
+          description: 'The color to change to. Can be a color name (e.g., "red") or a hex code (e.g., "#FF0000").',
+        },
+      },
+      required: ['color'],
+    },
+};
 
 export class VoiceBotService {
   private ai: GoogleGenAI;
@@ -27,6 +42,7 @@ export class VoiceBotService {
   public state$ = new BehaviorSubject<ConversationState>(ConversationState.IDLE);
   public transcript$ = new BehaviorSubject<TranscriptEntry[]>([]);
   public error$ = new BehaviorSubject<string | null>(null);
+  public robotColor$ = new BehaviorSubject<string>('#1F2937'); // Default gray-800
 
   constructor(apiKey: string) {
     this.ai = new GoogleGenAI({ apiKey });
@@ -70,6 +86,7 @@ export class VoiceBotService {
     
     this.currentInputTranscription$.next('');
     this.currentOutputTranscription$.next('');
+    this.robotColor$.next('#1F2937'); // Reset color
   }
 
   private _initializeAudioResources(): void {
@@ -108,7 +125,8 @@ export class VoiceBotService {
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
         },
-        systemInstruction: "You are Sparky, a friendly and curious robot from the future. You are talking to a human to learn more about their world. You are enthusiastic, a bit quirky, and love to ask questions. You should always sound cheerful and engaging. Keep your responses conversational and not too long.",
+        tools: [{ functionDeclarations: [changeRobotColorFunctionDeclaration] }],
+        systemInstruction: "You are Sparky, a friendly and curious robot from the future. You are talking to a human to learn more about their world. You are enthusiastic, a bit quirky, and love to ask questions. You can also change your color if the user asks you to! You should always sound cheerful and engaging. Keep your responses conversational and not too long.",
       },
       callbacks: {
         onopen: this._onSessionOpen,
@@ -168,6 +186,24 @@ export class VoiceBotService {
   }
 
   private _onSessionMessage = async (message: LiveServerMessage): Promise<void> => {
+    // Handle function calls
+    if (message.toolCall) {
+        for (const fc of message.toolCall.functionCalls) {
+            if (fc.name === 'changeRobotColor' && fc.args.color) {
+                this.robotColor$.next(fc.args.color as string);
+                this.sessionPromise?.then((session) => {
+                    session.sendToolResponse({
+                        functionResponses: {
+                            id: fc.id,
+                            name: fc.name,
+                            response: { result: `Color changed to ${fc.args.color}` },
+                        },
+                    });
+                });
+            }
+        }
+    }
+
     const outputText = message.serverContent?.outputTranscription?.text;
     const inputText = message.serverContent?.inputTranscription?.text;
 
