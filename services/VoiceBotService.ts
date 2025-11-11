@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { BehaviorSubject } from 'rxjs';
 import { ConversationState, TranscriptEntry } from '../types';
@@ -107,7 +108,7 @@ export class VoiceBotService {
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
         },
-        systemInstruction: 'You are a friendly and expressive robot. Keep your responses concise and conversational.',
+        systemInstruction: "You are Sparky, a friendly and curious robot from the future. You are talking to a human to learn more about their world. You are enthusiastic, a bit quirky, and love to ask questions. You should always sound cheerful and engaging. Keep your responses conversational and not too long.",
       },
       callbacks: {
         onopen: this._onSessionOpen,

@@ -15,7 +15,7 @@ const Eye: React.FC<{ cx: number; cy: number; state: ConversationState }> = ({ c
         return <circle cx={cx} cy={cy} r="12" className="fill-teal-300 animate-pulse" />;
       case ConversationState.IDLE:
       default:
-        return <circle cx={cx} cy={cy} r="8" className="fill-sky-400" />;
+        return <circle cx={cx} cy={cy} r="8" className="fill-sky-400 blinking-eye" />;
     }
   };
   return <g>{eyeContent()}</g>;
@@ -33,7 +33,7 @@ const Mouth: React.FC<{ state: ConversationState }> = ({ state }) => {
         return "M 90 135 L 150 135";
     }
   };
-  return <path d={mouthPath()} strokeWidth="5" strokeLinecap="round" className="stroke-sky-400 transition-all duration-300" fill="none" />;
+  return <path d={mouthPath()} strokeWidth="5" strokeLinecap="round" className={`stroke-sky-400 transition-all duration-300 ${state === ConversationState.SPEAKING ? 'animate-pulse' : ''}`} fill="none" />;
 };
 
 

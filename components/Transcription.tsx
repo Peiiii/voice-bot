@@ -39,7 +39,7 @@ export const Transcription: React.FC<TranscriptionProps> = ({ transcripts }) => 
         ))}
          {transcripts.length === 0 && (
           <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500">Press "Start Conversation" and begin speaking...</p>
+            <p className="text-gray-500 text-center">Hi! I'm Sparky, your new AI pal. <br/> Press "Let's Chat!" to start our conversation.</p>
           </div>
         )}
       </div>

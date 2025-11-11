@@ -4,8 +4,22 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Expressive Voice Bot</title>
+    <title>Meet Sparky, Your AI Pal</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @keyframes blink {
+        0%, 45%, 50%, 95%, 100% {
+          transform: scaleY(1);
+        }
+        47.5%, 97.5% {
+          transform: scaleY(0.1);
+        }
+      }
+      .blinking-eye {
+        animation: blink 5s ease-in-out infinite;
+        transform-origin: center;
+      }
+    </style>
   <script type="importmap">
 {
   "imports": {

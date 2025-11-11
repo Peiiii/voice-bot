@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { RobotFace } from './components/RobotFace';
 import { Transcription } from './components/Transcription';
@@ -10,7 +11,7 @@ const App: React.FC = () => {
   const getButtonState = () => {
     switch (conversationState) {
         case ConversationState.IDLE:
-            return { text: 'Start Conversation', className: 'bg-green-600 hover:bg-green-700' };
+            return { text: "Let's Chat!", className: 'bg-green-600 hover:bg-green-700' };
         case ConversationState.LISTENING:
             return { text: 'Listening...', className: 'bg-cyan-600' };
         case ConversationState.SPEAKING:
@@ -25,8 +26,8 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4 font-sans">
       <div className="w-full max-w-2xl mx-auto flex flex-col items-center">
-        <h1 className="text-4xl font-bold text-gray-200 mb-2">Expressive Voice Bot</h1>
-        <p className="text-gray-400 mb-6">Powered by Gemini 1.5 Flash</p>
+        <h1 className="text-4xl font-bold text-gray-200 mb-2">Meet Sparky, Your AI Pal</h1>
+        <p className="text-gray-400 mb-6">A curious bot from the future, powered by Gemini.</p>
         
         <RobotFace state={conversationState} />
         
