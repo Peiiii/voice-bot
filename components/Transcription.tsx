@@ -15,7 +15,7 @@ export const Transcription: React.FC<TranscriptionProps> = ({ transcripts }) => 
   }, [transcripts]);
 
   return (
-    <div ref={scrollRef} className="chat-scroll-mask w-full h-full bg-black/30 rounded-2xl px-4 py-6 overflow-y-auto backdrop-blur-lg shadow-inner">
+    <div ref={scrollRef} className="chat-scroll-mask w-full h-full px-4 py-6 overflow-y-auto">
       <div className="flex flex-col gap-4">
         {transcripts.map((entry, index) => (
           <div
