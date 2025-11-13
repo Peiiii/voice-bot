@@ -47,16 +47,16 @@ const App: React.FC = () => {
                      conversationState !== ConversationState.SPEAKING;
 
   const getStatusText = () => {
-    if (isThinking) return "Sparky is thinking...";
+    if (isThinking) return "Luna is charting the constellations... 🌌";
     switch (conversationState) {
         case ConversationState.CONNECTING:
-            return "Sparky is waking up...";
+            return "Warming up the starlight... ✨";
         case ConversationState.LISTENING:
-            return "Sparky is listening...";
+            return "Whisper your ideas to me, Dreamer... 🤫";
         case ConversationState.SPEAKING:
-            return "Sparky is speaking...";
+            return "A new star of thought is born! 🌟";
         default:
-            return "Sparky is waiting";
+            return "Luna is ready to explore the cosmos with you 🌙";
     }
   };
 

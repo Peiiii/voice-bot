@@ -1,10 +1,9 @@
-
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Subscription } from 'rxjs';
 import { ConversationState, TranscriptEntry, Conversation } from '../types';
 import { VoiceBotService } from '../services/VoiceBotService';
 
-const LOCAL_STORAGE_KEY = 'sparky-conversations';
+const LOCAL_STORAGE_KEY = 'companion-star-conversations';
 
 export const useAppManager = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
