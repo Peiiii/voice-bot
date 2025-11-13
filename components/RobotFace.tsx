@@ -4,11 +4,33 @@ import { ConversationState } from '../types';
 interface RobotFaceProps {
   state: ConversationState;
   color: string;
+  isThinking: boolean;
 }
+
+const Spinner: React.FC = () => (
+    <g transform="translate(120, 138)">
+      <path
+        d="M 20 0 A 20 20 0 0 1 6.18 19.02"
+        fill="none"
+        stroke="#67E8F9"
+        strokeWidth="5"
+        strokeLinecap="round"
+        className="spinner"
+      />
+    </g>
+);
+
 
 const Eye: React.FC<{ id: string; cx: number; cy: number; state: ConversationState }> = ({ id, cx, cy, state }) => {
   const eyeContent = () => {
     switch (state) {
+      case ConversationState.CONNECTING:
+         return (
+          <>
+            <circle cx={cx} cy={cy} r="12" fill="url(#eyeGradient)" />
+            <rect x={cx-10} y={cy-2} width="20" height="4" rx="2" className="fill-sky-300" filter="url(#glow)" />
+          </>
+        );
       case ConversationState.LISTENING:
         return (
           <>
@@ -45,6 +67,8 @@ const Eye: React.FC<{ id: string; cx: number; cy: number; state: ConversationSta
 const Mouth: React.FC<{ state: ConversationState }> = ({ state }) => {
   const mouthPath = () => {
     switch (state) {
+      case ConversationState.CONNECTING:
+        return ""; // Spinner is shown instead
       case ConversationState.LISTENING:
         return "M 90 135 Q 120 145 150 135";
       case ConversationState.SPEAKING:
@@ -71,7 +95,7 @@ const Mouth: React.FC<{ state: ConversationState }> = ({ state }) => {
 };
 
 
-export const RobotFace: React.FC<RobotFaceProps> = ({ state, color }) => {
+export const RobotFace: React.FC<RobotFaceProps> = ({ state, color, isThinking }) => {
   return (
     <div className="flex justify-center items-center p-4">
       <svg viewBox="0 0 240 200" className="w-64 h-auto md:w-80 drop-shadow-2xl">
@@ -93,10 +117,10 @@ export const RobotFace: React.FC<RobotFaceProps> = ({ state, color }) => {
             </filter>
         </defs>
         {/* Head */}
-        <g>
+        <g className={state === ConversationState.IDLE ? 'animate-head-bob' : ''}>
             <rect 
             x="20" y="20" width="200" height="160" rx="30" ry="30" 
-            className="stroke-gray-600 transition-colors duration-500" 
+            className="stroke-gray-600 transition-colors duration-500 robot-head" 
             strokeWidth="4" 
             style={{ fill: color }} 
             />
@@ -109,9 +133,10 @@ export const RobotFace: React.FC<RobotFaceProps> = ({ state, color }) => {
         {/* Antenna */}
         <line x1="120" y1="20" x2="120" y2="0" strokeWidth="3" className="stroke-gray-500" />
         <circle cx="120" cy="-5" r="6" className={`
-          ${state === ConversationState.LISTENING ? 'fill-cyan-400' : ''} 
-          ${state === ConversationState.SPEAKING ? 'fill-teal-300' : ''}
-          ${state === ConversationState.IDLE ? 'fill-gray-500' : ''}
+          ${isThinking || state === ConversationState.CONNECTING ? 'fill-sky-400 thinking-antenna-animation' : ''} 
+          ${!isThinking && state === ConversationState.LISTENING ? 'fill-cyan-400' : ''} 
+          ${!isThinking && state === ConversationState.SPEAKING ? 'fill-teal-300' : ''}
+          ${!isThinking && state === ConversationState.IDLE ? 'fill-gray-500' : ''}
           transition-colors duration-500
         `} filter="url(#glow)" />
 
@@ -120,7 +145,7 @@ export const RobotFace: React.FC<RobotFaceProps> = ({ state, color }) => {
         <Eye id="right-eye" cx={160} cy={80} state={state} />
 
         {/* Mouth */}
-        <Mouth state={state} />
+        {state === ConversationState.CONNECTING ? <Spinner /> : <Mouth state={state} />}
       </svg>
     </div>
   );

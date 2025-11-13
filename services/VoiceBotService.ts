@@ -58,7 +58,7 @@ export class VoiceBotService {
 
   public async start(): Promise<void> {
     this.error$.next(null);
-    this.state$.next(ConversationState.LISTENING);
+    this.state$.next(ConversationState.CONNECTING);
     
     try {
       this._initializeAudioResources();

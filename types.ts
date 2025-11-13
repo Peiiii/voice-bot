@@ -1,6 +1,7 @@
 
 export enum ConversationState {
   IDLE = 'IDLE',
+  CONNECTING = 'CONNECTING',
   LISTENING = 'LISTENING',
   SPEAKING = 'SPEAKING',
 }

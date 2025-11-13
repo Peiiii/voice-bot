@@ -41,7 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <aside
         ref={sidebarRef}
-        className={`fixed top-0 left-0 h-full w-64 bg-slate-950/80 backdrop-blur-xl text-gray-200 flex flex-col z-40 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:w-72 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed top-0 left-0 h-full w-64 bg-slate-950/80 backdrop-blur-xl text-gray-200 flex flex-col z-40 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0 lg:w-72 border-r border-white/5 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex items-center justify-between p-4 flex-shrink-0">
            <button 
@@ -72,14 +72,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }}
                   className={`group flex items-center justify-between w-full px-4 py-2 text-sm rounded-md transition-colors ${
                     conv.id === activeConversationId
-                      ? 'bg-sky-600/50 text-white font-semibold'
+                      ? 'bg-gradient-to-r from-sky-600 to-cyan-500 text-white font-semibold shadow-lg'
                       : 'text-gray-400 hover:bg-white/10 hover:text-gray-200'
                   }`}
                 >
                   <span className="truncate flex-1">{conv.title}</span>
                   <button 
                     onClick={(e) => handleDelete(e, conv.id)}
-                    className="ml-2 p-1 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 focus:opacity-100 transition-all"
+                    className="ml-2 p-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-400 focus:opacity-100 transition-all duration-300"
                     aria-label={`Delete conversation: ${conv.title}`}
                    >
                     <TrashIcon />
