@@ -1,7 +1,7 @@
 
 import { GoogleGenAI, LiveServerMessage, Modality, FunctionDeclaration, Type } from '@google/genai';
 import { BehaviorSubject } from 'rxjs';
-import { ConversationState, TranscriptEntry } from '../types';
+import { ConversationState, TranscriptEntry, Conversation } from '../types';
 import { AudioPlaybackQueue } from '../utils/audioPlayback';
 import { setupMicrophone, cleanupMicrophone, MicrophoneProcessor } from '../utils/microphone';
 
@@ -27,7 +27,6 @@ const changeRobotColorFunctionDeclaration: FunctionDeclaration = {
 export class VoiceBotService {
   private ai: GoogleGenAI;
   
-  // FIX: Replaced 'LiveSession' with 'any' as it is not an exported type from @google/genai.
   private sessionPromise: Promise<any> | null = null;
   private inputAudioContext: AudioContext | null = null;
   private outputAudioContext: AudioContext | null = null;
@@ -37,26 +36,34 @@ export class VoiceBotService {
   
   private currentInputTranscription$ = new BehaviorSubject<string>('');
   private currentOutputTranscription$ = new BehaviorSubject<string>('');
+  private hasGeneratedTitle = false;
 
   // Public observables for state management
   public state$ = new BehaviorSubject<ConversationState>(ConversationState.IDLE);
   public transcript$ = new BehaviorSubject<TranscriptEntry[]>([]);
   public error$ = new BehaviorSubject<string | null>(null);
   public robotColor$ = new BehaviorSubject<string>('#1F2937'); // Default gray-800
+  public title$ = new BehaviorSubject<string | null>(null);
 
   constructor(apiKey: string) {
     this.ai = new GoogleGenAI({ apiKey });
   }
 
+  public loadConversation(conversation: Conversation): void {
+    this.transcript$.next(conversation.transcripts);
+    this.robotColor$.next(conversation.robotColor);
+    this.title$.next(conversation.title);
+    this.hasGeneratedTitle = conversation.title !== 'New Conversation';
+  }
+
   public async start(): Promise<void> {
     this.error$.next(null);
-    this.transcript$.next([]);
-    this.state$.next(ConversationState.LISTENING); // Early optimistic state update
+    this.state$.next(ConversationState.LISTENING);
     
     try {
       this._initializeAudioResources();
       this.sessionPromise = this._connectToLiveSession();
-      await this.sessionPromise; // Wait for the session to be established before returning
+      await this.sessionPromise;
     } catch (err: any) {
       this.error$.next(`Failed to start conversation: ${err.message}`);
       await this.stop();
@@ -86,16 +93,19 @@ export class VoiceBotService {
     
     this.currentInputTranscription$.next('');
     this.currentOutputTranscription$.next('');
-    this.robotColor$.next('#1F2937'); // Reset color
+    // Color and transcript are NOT reset here, they are managed by loadConversation
   }
 
   private _initializeAudioResources(): void {
-    this.inputAudioContext = new AudioContext({ sampleRate: 16000 });
-    this.outputAudioContext = new AudioContext({ sampleRate: 24000 });
+    if (!this.inputAudioContext || this.inputAudioContext.state === 'closed') {
+      this.inputAudioContext = new AudioContext({ sampleRate: 16000 });
+    }
+    if (!this.outputAudioContext || this.outputAudioContext.state === 'closed') {
+      this.outputAudioContext = new AudioContext({ sampleRate: 24000 });
+    }
     
     this.playbackQueue = new AudioPlaybackQueue(this.outputAudioContext);
     this.playbackQueue.setOnPlaybackEnd(() => {
-      // When the bot finishes speaking, it goes back to listening.
       if (this.state$.getValue() === ConversationState.SPEAKING) {
         this.state$.next(ConversationState.LISTENING);
       }
@@ -161,13 +171,27 @@ export class VoiceBotService {
     const last = currentTranscript[currentTranscript.length - 1];
 
     if (last?.speaker === speaker) {
-      // Update the last entry for streaming transcript
       const updatedTranscript = [...currentTranscript.slice(0, -1), { speaker, text }];
       this.transcript$.next(updatedTranscript);
     } else {
-      // Add a new entry for a new speaker
       const updatedTranscript = [...currentTranscript, { speaker, text }];
       this.transcript$.next(updatedTranscript);
+    }
+  }
+  
+  private async _generateConversationTitle(firstUtterance: string): Promise<void> {
+    try {
+      const prompt = `Create a short, concise title (4 words max) for a conversation that starts with this: "${firstUtterance}"`;
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+      });
+      const newTitle = response.text.trim().replace(/"/g, '');
+      if (newTitle) {
+        this.title$.next(newTitle);
+      }
+    } catch (e) {
+      console.error("Failed to generate conversation title:", e);
     }
   }
 
@@ -186,7 +210,6 @@ export class VoiceBotService {
   }
 
   private _onSessionMessage = async (message: LiveServerMessage): Promise<void> => {
-    // Handle function calls
     if (message.toolCall) {
         for (const fc of message.toolCall.functionCalls) {
             if (fc.name === 'changeRobotColor' && fc.args.color) {
@@ -214,6 +237,10 @@ export class VoiceBotService {
     }
     
     if (message.serverContent?.turnComplete) {
+      if (!this.hasGeneratedTitle && this.currentInputTranscription$.getValue().trim().length > 0) {
+        this.hasGeneratedTitle = true; // Attempt only once per session
+        this._generateConversationTitle(this.currentInputTranscription$.getValue());
+      }
       this.currentInputTranscription$.next('');
       this.currentOutputTranscription$.next('');
       this.state$.next(ConversationState.LISTENING);
@@ -233,6 +260,7 @@ export class VoiceBotService {
 
   private _onSessionClose = (): void => {
      console.log('Session closed');
-     this.stop();
+     // The stop() method is called by the AppManager to ensure proper state transition
+     this.state$.next(ConversationState.IDLE);
   }
 }

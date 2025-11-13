@@ -1,54 +1,99 @@
-
-import React from 'react';
+import React, { useState } from 'react';
 import { RobotFace } from './components/RobotFace';
 import { Transcription } from './components/Transcription';
 import { ConversationState } from './types';
-import { useVoiceBot } from './hooks/useVoiceBot';
+import { useAppManager } from './hooks/useVoiceBot';
+import { Sidebar } from './components/Sidebar';
+import { MenuIcon, MicrophoneIcon } from './components/icons';
+
 
 const App: React.FC = () => {
-  const { conversationState, transcripts, error, toggleConversation, robotColor } = useVoiceBot();
+  const {
+    conversationState,
+    error,
+    robotColor,
+    conversations,
+    activeConversation,
+    toggleConversation,
+    startNewConversation,
+    selectConversation,
+    deleteConversation,
+  } = useAppManager();
   
-  const getButtonState = () => {
-    switch (conversationState) {
-        case ConversationState.IDLE:
-            return { text: "Let's Chat!", className: 'bg-green-600 hover:bg-green-700' };
-        case ConversationState.LISTENING:
-            return { text: 'Listening...', className: 'bg-cyan-600' };
-        case ConversationState.SPEAKING:
-            return { text: 'Speaking...', className: 'bg-teal-600' };
-        default:
-            return { text: 'Stop Conversation', className: 'bg-red-600 hover:bg-red-700' };
-    }
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+
+  const handleSelectConversation = (id: string) => {
+    selectConversation(id);
+    setSidebarOpen(false); // Close sidebar on selection
   }
-  
-  const buttonState = getButtonState();
+
+  const handleNewConversation = () => {
+    startNewConversation();
+    setSidebarOpen(false); // Close sidebar on new chat
+  }
+
+  const isListening = conversationState === ConversationState.LISTENING;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4 font-sans">
-      <div className="w-full max-w-2xl mx-auto flex flex-col items-center">
-        <h1 className="text-4xl font-bold text-gray-200 mb-2">Meet Sparky, Your AI Pal</h1>
-        <p className="text-gray-400 mb-6">A curious bot from the future, powered by Gemini.</p>
-        
-        <RobotFace state={conversationState} color={robotColor} />
-        
-        <div className="w-full my-6">
-          <Transcription transcripts={transcripts} />
-        </div>
-        
-        {error && <div className="bg-red-500/20 border border-red-500 text-red-300 px-4 py-2 rounded-md mb-4 text-sm">{error}</div>}
-
-        <button
-          onClick={toggleConversation}
-          disabled={conversationState !== ConversationState.IDLE && conversationState !== ConversationState.LISTENING}
-          className={`px-8 py-4 rounded-full text-lg font-semibold transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-offset-gray-900 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed ${
-            conversationState === ConversationState.IDLE ? buttonState.className + ' focus:ring-green-500' : 
-            conversationState === ConversationState.LISTENING ? buttonState.className + ' cursor-pointer hover:bg-red-700 focus:ring-red-500' :
-            buttonState.className + ' focus:ring-teal-500'
-          }`}
+    <div className="flex h-screen bg-slate-950 text-white font-sans">
+      <Sidebar 
+        isOpen={sidebarOpen}
+        setIsOpen={setSidebarOpen}
+        conversations={conversations}
+        activeConversationId={activeConversation?.id ?? null}
+        onNewConversation={handleNewConversation}
+        onSelectConversation={handleSelectConversation}
+        onDeleteConversation={deleteConversation}
+      />
+      <main className="flex-1 flex flex-col items-center justify-center p-4 relative h-full overflow-hidden">
+        <button 
+          aria-label="Open conversation history"
+          className="absolute top-4 left-4 lg:hidden z-20 p-2 rounded-md bg-black/20 hover:bg-white/10 transition-colors backdrop-blur-sm"
+          onClick={() => setSidebarOpen(true)}
         >
-          {conversationState === ConversationState.LISTENING ? 'Stop Conversation' : buttonState.text}
+          <MenuIcon />
         </button>
-      </div>
+
+        <div className="w-full max-w-6xl mx-auto flex flex-col items-center justify-center flex-1 min-h-0">
+          <div className="w-full flex-1 flex flex-col md:flex-row items-center gap-8 min-h-0">
+            {/* Left Panel: Robot */}
+            <div className="w-full md:w-1/2 flex flex-col justify-center items-center gap-6">
+              <RobotFace state={conversationState} color={robotColor} />
+              <div className="flex-shrink-0 flex flex-col items-center">
+                <div className="relative flex items-center justify-center">
+                  {isListening && (
+                    <>
+                      <div className="absolute w-24 h-24 bg-sky-500/20 rounded-full animate-[listening-wave_2s_ease-out_infinite]"></div>
+                      <div className="absolute w-24 h-24 bg-sky-500/20 rounded-full animate-[listening-wave_2s_ease-out_1s_infinite]"></div>
+                    </>
+                  )}
+                  <button
+                    onClick={toggleConversation}
+                    disabled={conversationState === ConversationState.SPEAKING}
+                    className={`relative w-24 h-24 rounded-full text-lg font-semibold transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-offset-slate-950 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center
+                    ${
+                      conversationState === ConversationState.IDLE ? 'bg-sky-600 hover:bg-sky-500 focus:ring-sky-400 animate-[pulse-glow_3s_ease-in-out_infinite]' :
+                      isListening ? 'bg-red-600 hover:bg-red-500 focus:ring-red-400' :
+                      'bg-gray-600 focus:ring-gray-500'
+                    }`}
+                    aria-label={isListening ? 'Stop conversation' : "Start conversation"}
+                  >
+                    <MicrophoneIcon className="w-10 h-10"/>
+                  </button>
+                </div>
+              </div>
+            </div>
+            {/* Right Panel: Transcript */}
+            <div className="w-full md:w-1/2 h-full flex flex-col min-h-0">
+              <Transcription transcripts={activeConversation?.transcripts ?? []} />
+            </div>
+          </div>
+          
+          {error && <div className="bg-red-500/20 border border-red-500 text-red-300 px-4 py-2 rounded-md mt-4 text-sm flex-shrink-0">{error}</div>}
+
+        </div>
+      </main>
     </div>
   );
 };
